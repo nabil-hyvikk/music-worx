@@ -5821,8 +5821,10 @@ fieldset:disabled .btn {
   --bs-pagination-focus-bg: #e5e5e5;
   --bs-pagination-focus-box-shadow: 0 0 0 0.2rem rgba(233, 30, 99, 0.25);
   --bs-pagination-active-color: #fff;
-  --bs-pagination-active-bg: #e91e63;
-  --bs-pagination-active-border-color: #e91e63;
+  /* --bs-pagination-active-bg: #e91e63; */
+  --bs-pagination-active-bg: #1F7D88;
+  /* --bs-pagination-active-border-color: #e91e63; */
+  --bs-pagination-active-border-color: #1F7D88;
   --bs-pagination-disabled-color: #525252;
   --bs-pagination-disabled-bg: #fff;
   --bs-pagination-disabled-border-color: #d4d4d4;
@@ -26228,7 +26230,9 @@ body:not(.dark-version) .sidenav.bg-transparent .collapse .nav-item .nav-link.ac
 }
 
 .page-item.active .page-link {
-  box-shadow: 0 3px 5px -1px rgba(0, 0, 0, 0.09), 0 2px 3px -1px rgba(0, 0, 0, 0.07);
+  /* box-shadow: 0 3px 5px -1px rgba(0, 0, 0, 0.09), 0 2px 3px -1px rgba(0, 0, 0, 0.07); */
+  box-shadow: 0 3px 5px -1px rgba(31, 125, 136, 0.4), 0 2px 3px -1px rgba(31, 125, 136, 0.2);
+  color:#fff;
 }
 
 .page-item .page-link,

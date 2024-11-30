@@ -16,12 +16,15 @@
     <link href="../../assets/css/nucleo-icons.css" rel="stylesheet" />
     <link href="../../assets/css/nucleo-svg.css" rel="stylesheet" />
     <!-- Font Awesome Icons -->
-    <script src="https://kit.fontawesome.com/42d5adcbca.js" crossorigin="anonymous"></script>
+    {{-- <script src="https://kit.fontawesome.com/42d5adcbca.js" crossorigin="anonymous"></script> --}}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.1/css/all.min.css" integrity="sha512-5Hs3dF2AEPkpNAR7UiOHba+lRSJNeM2ECkwxUIxC1Q/FLycGTbNapWXB4tP889k5T5Ju8fs4b1P5z/iB4nMfSQ==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
     <!-- Material Icons -->
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
     <!-- CSS Files -->
     <link id="pagestyle" href="../../assets/css/material-dashboard.css?v=3.1.0" rel="stylesheet" />
+    <link id="pagestyle" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
 
     @yield('css')
 </head>
@@ -52,10 +55,10 @@
                         <span class="nav-link-text ms-2 ps-1">{{ $fullName }}</span>
                     </a>
                     <div class="collapse" id="ProfileNav" style="">
-                        <ul class="nav ">
-                            <li class="nav-item">
+                        <ul class="nav active">
+                            <li class="nav-item active">
                                 <a class="nav-link text-dark" href="{{ route('profile') }}">
-                                    <span class="sidenav-mini-icon"> MP </span>
+                                    <span class="sidenav-mini-icon {{ request()->routeIs('profile') ? 'active' : '' }}"> MP </span>
                                     <span class="sidenav-normal ms-3 ps-1"> My Profile </span>
                                 </a>
                             </li>
@@ -84,7 +87,7 @@
                     <div class="collapse show " id="dashboardsExamples">
                         <ul class="nav ">
                             <li class="nav-item active">
-                                <a class="nav-link text-dark active" href="{{ route('dashboard') }}">
+                                <a class="nav-link text-dark" href="{{ route('dashboard') }}">
                                     <span class="sidenav-mini-icon"> A </span>
                                     <span class="sidenav-normal ms-1 ps-1"> Statistics </span>
                                 </a>
@@ -93,6 +96,12 @@
                                 <a class="nav-link text-dark " href="../../pages/dashboards/discover.html">
                                     <span class="sidenav-mini-icon"> D </span>
                                     <span class="sidenav-normal ms-1 ps-1"> Charts </span>
+                                </a>
+                            </li>
+                            <li class="nav-item active">
+                                <a class="nav-link text-dark {{ request()->routeIs('emails') ? 'active' : '' }}" href="{{ route('emails') }}"y>
+                                    <span class="sidenav-mini-icon"> E </span>
+                                    <span class="sidenav-normal ms-1 ps-1"> Emails </span>
                                 </a>
                             </li>
                             <li class="nav-item ">
@@ -231,8 +240,7 @@
                 <li class="nav-item">
                     <a data-bs-toggle="collapse" href="#applicationsExamples" class="nav-link text-dark "
                         aria-controls="applicationsExamples" role="button" aria-expanded="false">
-                        <i
-                            class="material-symbols-rounded opacity-5 {% if page.brand == 'RTL' %}ms-2{% else %} me-2{% endif %}">apps</i>
+                        <i class="material-symbols-rounded opacity-5 {% if page.brand == 'RTL' %}ms-2{% else %} me-2{% endif %}">apps</i>
                         <span class="nav-link-text ms-1 ps-1">Applications</span>
                     </a>
                     <div class="collapse " id="applicationsExamples">
@@ -1008,12 +1016,15 @@
     <script src="../../assets/js/core/bootstrap.min.js"></script>
     <script src="../../assets/js/plugins/perfect-scrollbar.min.js"></script>
     <script src="../../assets/js/plugins/smooth-scrollbar.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
     <!-- Kanban scripts -->
     <script src="../../assets/js/plugins/dragula/dragula.min.js"></script>
     <script src="../../assets/js/plugins/jkanban/jkanban.min.js"></script>
     <script src="../../assets/js/plugins/chartjs.min.js"></script>
     <script src="../../assets/js/plugins/world.js"></script>
-    <script>
+    {{-- <script>
         var ctx = document.getElementById("chart-bars").getContext("2d");
 
         new Chart(ctx, {
@@ -1294,7 +1305,7 @@
 
 
         });
-    </script>
+    </script> --}}
     <script>
         var win = navigator.platform.indexOf('Win') > -1;
         if (win && document.querySelector('#sidenav-scrollbar')) {

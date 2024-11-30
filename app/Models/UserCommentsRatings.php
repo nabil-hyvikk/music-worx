@@ -13,6 +13,11 @@ class UserCommentsRatings extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    public function track()
+    {
+        return $this->belongsTo(Mp3Mix::class, 'track_id', 'id');
+    }
+
     // public function track()
     // {
     //     return $this->belongsTo(Track::class, 'track_id');

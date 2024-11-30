@@ -13,12 +13,18 @@ use App\Models\SettingsAudio;
 use App\Models\SummeryTopHype;
 use App\Models\SummeryTopPicks;
 use App\Models\User;
+use Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class Catalog extends Controller
 {
+    protected $cloud_lib;
+    public function __construct()
+    {
+        $this->cloud_lib = new Cloud_lib();
+    }
     //get release by Id
     public function release(Request $request)
     {
@@ -26,69 +32,52 @@ class Catalog extends Controller
         $release_id = $request->input('release_id');
         if (empty($release_id)) {
             return TheOneResponse::other(301, ['success' => false], 'Release ID is required');
-        } else {
-            $release_info = DB::table('tbl_release')->select('title', 'cover', 'release_id')
-                ->where('release_id', $release_id)
-                ->get();
-
-            foreach ($release_info as $key => $value) {
-                $fname = explode('.', $value->cover);
-                $release_info[$key]->cover250x250 = 'https://images.music-worx.com/covers/' . $fname[0] . '-250x250.jpg';
-                $release_info[$key]->cover100x100 = 'https://images.music-worx.com/covers/' . $fname[0] . '-100x100.jpg';
-            }
-
-            if ($release_info) {
-                return TheOneResponse::ok(['release' => $release_info], 'Release info');
-            } else {
-                return TheOneResponse::other(301, ['success' => false], 'Release not found');
-            }
         }
+
+        $release_info = DB::table('tbl_release')
+            ->select(
+                'tbl_release.*',
+                'tbl_track_artists.artist_id',
+                'u.artist_name as label_nm',
+                'u.image')
+            ->leftJoin('tbl_track_artists', 'tbl_release.release_id', '=', 'tbl_track_artists.release_id')
+            ->leftJoin('tbl_users as u', 'tbl_release.label', '=', 'u.id')
+            ->where('tbl_release.release_id', $release_id)
+            ->first();
+
+        if (!$release_info) {
+            return TheOneResponse::other(301, ['success' => false], 'Release not found');
+        }
+        $fname = $fname = explode('.', $release_info->cover);
+        $release_info->cover250x250 = 'https://images.music-worx.com/covers/' . $fname[0] . '-250x250.jpg';
+        $release_info->cover100x100 = 'https://images.music-worx.com/covers/' . $fname[0] . '-100x100.jpg';
+
+        return TheOneResponse::ok(['release' => $release_info], 'Release info');
     }
+
     // public function release(Request $request)
     // {
+    //     // 'title', 'cover', 'release_id'
     //     $release_id = $request->input('release_id');
     //     if (empty($release_id)) {
     //         return TheOneResponse::other(301, ['success' => false], 'Release ID is required');
+    //     } else {
+    //         $release_info = DB::table('tbl_release')->select('title', 'cover', 'release_id')
+    //             ->where('release_id', $release_id)
+    //             ->get();
+
+    //         foreach ($release_info as $key => $value) {
+    //             $fname = explode('.', $value->cover);
+    //             $release_info[$key]->cover250x250 = 'https://images.music-worx.com/covers/' . $fname[0] . '-250x250.jpg';
+    //             $release_info[$key]->cover100x100 = 'https://images.music-worx.com/covers/' . $fname[0] . '-100x100.jpg';
+    //         }
+
+    //         if ($release_info) {
+    //             return TheOneResponse::ok(['release' => $release_info], 'Release info');
+    //         } else {
+    //             return TheOneResponse::other(301, ['success' => false], 'Release not found');
+    //         }
     //     }
-
-    //     $releaseResult = Release::with('label', 'trackArtists', 'artists')->where('release_id', $release_id)->first();
-
-    //     if (!$releaseResult) {
-    //         return TheOneResponse::notFound('No data found');
-    //     }
-
-    //     $songResult = Mp3Mix::where('release_id', $release_id)->with([
-    //         'artists' => function ($query) {
-    //             $query->select('tbl_users.id', 'artist_name');
-    //         },
-    //         'release' => function ($query) {
-    //             $query->select('release_id', 'original_release_date');
-    //         },
-    //     ])->get();
-
-    //     foreach ($songResult as $song) {
-    //         $coverName = $song->cover;
-    //         $song->cover250x250 = "https://images.music-worx.com/covers/{$coverName}-250x250.jpg";
-    //         $song->cover100x100 = "https://images.music-worx.com/covers/{$coverName}-100x100.jpg";
-    //     }
-
-    //     $coverName = pathinfo($releaseResult->cover, PATHINFO_FILENAME);
-    //     $releaseResult->cover250x250 = "https://images.music-worx.com/covers/{$coverName}-250x250.jpg";
-    //     $releaseResult->cover100x100 = "https://images.music-worx.com/covers/{$coverName}-100x100.jpg";
-
-    //     $finalArr = [
-    //         'release' => [
-    //             'title' => $releaseResult->title,
-    //             'cover' => $releaseResult->cover,
-    //             'release_id' => $releaseResult->release_id,
-    //             'artist_id' => $releaseResult->artist,
-    //             'cover250x250' => $releaseResult->cover250x250,
-    //             'cover100x100' => $releaseResult->cover100x100,
-    //         ],
-    //         'songs' => $songResult,
-    //     ];
-
-    //     return TheOneResponse::ok(['data' => $finalArr], 'Information of Release');
     // }
 
     //get track by Id
@@ -100,41 +89,66 @@ class Catalog extends Controller
             return TheOneResponse::other(301, ['success' => false], 'Release ID is required');
         }
 
-        $songResult = Mp3Mix::select('*')
-            ->with([
-                'artists:id,artist_name',
-                'release:release_id,original_release_date,release_source,distributor_id,label'
-            ])->find($track_id);
+        // $songResult = Mp3Mix::select('*')
+        //     ->with([
+        //         'artists:id,artist_name',
+        //         'release:release_id,original_release_date,release_source,distributor_id,label'
+        //     ])->find($track_id);
 
+        $songResult = DB::table('tbl_mp3_mix')->select(
+            'tbl_mp3_mix.*',
+            'tbl_mp3_mix.id',
+            'tbl_release.release_id',
+            'tbl_release.label',
+            'tbl_release.title',
+            'tbl_release.cover',
+            'tbl_release.original_release_date as release_date',
+            DB::raw('GROUP_CONCAT(DISTINCT u.artist_name ORDER BY u.artist_name SEPARATOR ", ") as artist_names')
+        )
+            ->join('tbl_release', 'tbl_release.release_id', '=', 'tbl_mp3_mix.release_id')
+            ->Join('tbl_track_artists as a', 'tbl_mp3_mix.id', '=', 'a.track_id')
+            ->Join('tbl_users as u', 'u.id', '=', 'a.artist_id')
+            ->where('tbl_mp3_mix.id', $track_id)
+            ->first();
 
-        // $songResult = Mp3Mix::where('id', $track_id)->with([
-        //     'artists' => function ($query) {
-        //         $query->select('tbl_users.id', 'artist_name');
-        //     },
-        //     'release:release_id,original_release_date,release_source,distributor_id'
-        // ])->first();
 
         if (!$songResult) {
             return TheOneResponse::notFound('No data found');
         }
 
-        $artists = $songResult->artists->pluck('artist_name')->join(', ');
-        $songResult['artist_name'] = $artists;
+        //$artists = $songResult->artists->pluck('artist_name')->join(', ');
+        // $songResult['artist_name'] = $artists;
 
-        $label = $songResult->release->label;
+        // $label = $songResult->release->label;
 
-        if (!is_numeric($label)) {
-            $songResult['label_name'] = $label;
+        if (!is_numeric($songResult->label)) {
+            $songResult->label_name = $songResult->label;
         } else {
-            $labelName = User::where('id', $label)->value('artist_name');
-            $songResult['label_name'] = $labelName ?: '';
+            $labelName = User::where('id', $songResult->label)->value('artist_name');
+            $songResult->label_name = $labelName ?: '';
         }
 
-        $release = $songResult->release;
-        $songResult['price'] = $release ? $this->getIndividualTrackPrice($songResult, $release) : 0.00;
+        $fname = $fname = explode('.', $songResult->cover);
+        $songResult->cover250x250 = 'https://images.music-worx.com/covers/' . $fname[0] . '-250x250.jpg';
+        $songResult->cover100x100 = 'https://images.music-worx.com/covers/' . $fname[0] . '-100x100.jpg';
+
+        // Get Preview URL
+        if ($songResult->mp3_preview != $songResult->mp3_file) {
+            $previewUrl = $this->cloud_lib->get_signed_url($songResult->mp3_preview, 'music_bucket', 'prev');
+        } else {
+            if (!is_null($songResult['mp3_file'])) {
+                $previewUrl = $this->cloud_lib->get_signed_url($songResult->mp3_sd, 'music_bucket', 'new_release');
+            } else {
+                $previewUrl = $this->cloud_lib->get_signed_url($songResult->mp3_file, 'music_bucket', 'new_release');
+            }
+        }
+        $songResult->preview_file_url = $previewUrl;
+
+        //$release = $songResult->release;
+        //$songResult['price'] = $release ? $this->getIndividualTrackPrice($songResult, $release) : 0.00;
 
         // $release_id = $songResult->release->release_id;
-        // $releaseResult = Release::where('release_id', $release_id)->first();
+        $releaseResult = Release::where('release_id', $songResult->release_id)->first();
 
         // $label = $songResult->first()->release->label;
         // if (!is_numeric($label)) {
@@ -146,8 +160,8 @@ class Catalog extends Controller
         // }
 
         // $priceArr = array();
-        // $final_pr = $this->getIndividualTrackPrice($songResult, $releaseResult);
-        // $songResult['price'] = $final_pr;
+        $songResult->price = $this->getIndividualTrackPrice($songResult, $releaseResult);
+        ;
 
         unset($songResult->artists);
         return TheOneResponse::ok(['data' => $songResult], 'Track fetched successfully.');
@@ -240,8 +254,8 @@ class Catalog extends Controller
                 $fname = explode('.', $value->cover);
                 $value->cover250x250 = 'https://images.music-worx.com/covers/' . $fname[0] . '-250x250.jpg';
                 $value->cover100x100 = 'https://images.music-worx.com/covers/' . $fname[0] . '-100x100.jpg';
-                unset($value->numb);
-                unset($value->allowed_tracks);
+                // unset($value->numb);
+                // unset($value->allowed_tracks);
             }
 
             if ($stacked) {
@@ -292,59 +306,71 @@ class Catalog extends Controller
             $append .= " AND r.staff_pick=1 ";
         }
 
-        $query = "SELECT r.release_id, r.id,r.slug,r.title,r.gener,r.label, r.user_id, u.artist_name AS label_nm,r.release_type, r.cover
-        FROM tbl_release r, tbl_users u
-        WHERE (ISNULL(r.release_ref) OR r.release_ref=r.release_id)
-        AND IF(CONCAT('',r.label * 1), r.label, r.user_id) = u.id
-        AND r.online=1
-        AND (r.countries='WW')
-        " . $append . "
-          ORDER BY " . $order[0] . " " . $order[1];
-        $query .= " LIMIT " . $per_page . " OFFSET " . $page;
+        // $query = "SELECT r.release_id, r.id,r.slug,r.title,r.gener,r.label, r.user_id, u.artist_name AS label_nm,r.release_type, r.cover
+        // FROM tbl_release r, tbl_users u
+        // WHERE (ISNULL(r.release_ref) OR r.release_ref=r.release_id)
+        // AND IF(CONCAT('',r.label * 1), r.label, r.user_id) = u.id
+        // AND r.online=1
+        // AND (r.countries='WW')
+        // " . $append . "
+        //   ORDER BY " . $order[0] . " " . $order[1];
+        // $query .= " LIMIT " . $per_page . " OFFSET " . $page;
 
-        $res = DB::select($query);
+        $query = "SELECT r.release_id, r.id, r.slug, r.title, r.gener, r.label, r.user_id, u.artist_name AS label_nm, r.release_type, r.cover,
+        GROUP_CONCAT(DISTINCT a.artist_name ORDER BY a.artist_name SEPARATOR ', ') AS artist_names FROM tbl_release r LEFT JOIN
+        tbl_track_artists ta ON r.release_id = ta.release_id LEFT JOIN tbl_users a ON ta.artist_id = a.id LEFT JOIN
+        tbl_users u ON IF(CONCAT('', r.label * 1), r.label, r.user_id) = u.id WHERE (ISNULL(r.release_ref) OR r.release_ref = r.release_id)
+        AND r.online = 1 AND r.countries = 'WW' " . $append . " GROUP BY r.release_id ORDER BY " . $order[0] . " " . $order[1] . "
+        LIMIT " . $per_page . " OFFSET " . $page;
 
-        if (is_array($res) && count($res)) {
-            $result = $res;
+        $result = DB::select($query);
 
+        if (is_array($result) && count($result)) {
             foreach ($result as $key => $value) {
                 $artist_list = [];
                 if (strtolower($value->release_type) == 'compilation') {
                     $value->artist_name = 'Various Artists';
                 } else {
-                    $artists = $this->getArtistByReleaseId($value->release_id);
-                    $artist_links = array();
-                    foreach ($artists as $art) {
-                        $artist_links[] = $art->artist_name;
-                    }
-                    $value->artist_name = implode(', ', $artist_links);
+                    $value->artist_name = $value->artist_names;
                 }
+                unset($value->artist_names);
             }
+
+            // foreach ($result as $key => $value) {
+            //     $artist_list = [];
+            //     if (strtolower($value->release_type) == 'compilation') {
+            //         $value->artist_name = 'Various Artists';
+            //     } else {
+            //         $artists = $this->getArtistByReleaseId($value->release_id);
+            //         $artist_links = array();
+            //         foreach ($artists as $art) {
+            //             $artist_links[] = $art->artist_name;
+            //         }
+            //         $value->artist_name = implode(', ', $artist_links);
+            //     }
+            // }
             return $result;
         }
 
         return null;
     }
 
-    public function getArtistByReleaseId($release_id, $type = null)
-    {
-        $query = DB::table('tbl_track_artists as a')
-            ->join('tbl_users as u', 'u.id', '=', 'a.artist_id')
-            ->where('a.release_id', $release_id)
-            ->groupBy('u.id')  // Group only by artist ID
-            ->select('u.id', DB::raw('MAX(u.artist_name) as artist_name, MAX(u.slug) as slug'));
+    // public function getArtistByReleaseId($release_id, $type = null)
+    // {
+    //     $query = DB::table('tbl_track_artists as a')
+    //         ->join('tbl_users as u', 'u.id', '=', 'a.artist_id')
+    //         ->where('a.release_id', $release_id)
+    //         ->groupBy('u.id')  // Group only by artist ID
+    //         ->select('u.id', DB::raw('MAX(u.artist_name) as artist_name, MAX(u.slug) as slug'));
 
-        if (!is_null($type)) {
-            $query->where('a.type', $type);
-        } else {
-            $query->orderBy('a.type', 'ASC');
-        }
+    //     if (!is_null($type)) {
+    //         $query->where('a.type', $type);
+    //     } else {
+    //         $query->orderBy('a.type', 'ASC');
+    //     }
 
-        return $query->get()->toArray();
-    }
-
-
-
+    //     return $query->get()->toArray();
+    // }
 
     //get filtered tracks by prime and crew pick
     public function tracks(Request $request)
@@ -356,19 +382,51 @@ class Catalog extends Controller
         $offset = $request->input('offset') ?: 0;
 
 
-        $query = Mp3Mix::select(
-            'tbl_mp3_mix.*',
-            'users.artist_name as artist_name',
-            'label_users.artist_name as label_name'
-        )->with([
-                    'release' => function ($query) {
-                        $query->select('release_id', 'title', 'original_release_date', 'cover', 'top', 'staff_pick');
-                    },
-                ])
-            ->join('tbl_release', 'tbl_release.release_id', '=', 'tbl_mp3_mix.release_id')
-            ->join('tbl_users as users', 'users.id', '=', 'tbl_release.artist')
-            ->join('tbl_users as label_users', 'label_users.id', '=', 'tbl_release.label')
-            ->where('tbl_release.online', 1);
+        // $query = Mp3Mix::select(
+        //     'tbl_mp3_mix.*',
+        //     'users.artist_name as artist_name',
+        //     'label_users.artist_name as label_name'
+        // )->with([
+        //             'release' => function ($query) {
+        //                 $query->select('release_id', 'title', 'original_release_date', 'cover', 'top', 'staff_pick');
+        //             },
+        //         ])
+        //     ->join('tbl_release', 'tbl_release.release_id', '=', 'tbl_mp3_mix.release_id')
+        //     ->join('tbl_users as users', 'users.id', '=', 'tbl_release.artist')
+        //     ->join('tbl_users as label_users', 'label_users.id', '=', 'tbl_release.label')
+        //     ->where('tbl_release.online', 1);
+
+        $query = DB::table('tbl_mp3_mix as t')->select(
+            't.id',
+            't.mp3_file',
+            't.mp3_sd',
+            't.flac_file',
+            't.duration',
+            't.mp3_preview',
+            't.stream_status',
+            't.stream_countries',
+            't.key as track_key',
+            't.gener',
+            't.mix_name',
+            't.song_name',
+            't.bpm',
+            't.waveform',
+            't.green_waveform',
+            't.full_wf',
+            't.full_gwf',
+            't.preview_starts',
+            't.preview_ends',
+            't.slug',
+            't.user_id',
+            't.release_id',
+            't.id as track_id',
+            'tbl_release.cover',
+            'tbl_release.label',
+            'tbl_release.title',
+            DB::raw('(SELECT user.artist_name FROM tbl_users as user WHERE user.id = t.user_id) as artist_name'),
+            DB::raw('(SELECT user.artist_name FROM tbl_users as user WHERE user.id = tbl_release.label) as label_name')
+        )
+            ->join('tbl_release', 'tbl_release.release_id', '=', 't.release_id');
 
         if ($prime == 1) {
             $query->where('tbl_release.top', 1);
@@ -377,23 +435,38 @@ class Catalog extends Controller
         }
 
         if (is_array($genre) && !empty($genre)) {
-            $query->whereIn('tbl_mp3_mix.gener', $genre);
+            $query->whereIn('t.gener', $genre);
         } elseif (!empty($genre)) {
-            $query->where('tbl_mp3_mix.gener', $genre);
+            $query->where('t.gener', $genre);
         }
 
         $query->limit($limit)->offset($offset)->orderBy('tbl_release.original_release_date', 'DESC');
 
-        $res = $query->get();
-        if ($res) {
-            return TheOneResponse::ok(['tracks' => $res], 'Tracks retrieved successfully.');
+        $result = $query->get();
+        foreach ($result as $key => $value) {
+            $fname = explode('.', $value->cover);
+            $value->cover250x250 = 'https://images.music-worx.com/covers/' . $fname[0] . '-250x250.jpg';
+            $value->cover100x100 = 'https://images.music-worx.com/covers/' . $fname[0] . '-100x100.jpg';
+
+            if ($value->mp3_preview != $value->mp3_file) {
+                $value->preview_file_url = $this->cloud_lib->get_signed_url($value->mp3_preview, 'music_bucket', 'prev');
+            } else {
+                if (!is_null($value->mp3_file)) {
+                    $value->preview_file_url = $this->cloud_lib->get_signed_url($value->mp3_sd, 'music_bucket', 'new_release');
+                } else {
+                    $value->preview_file_url = $this->cloud_lib->get_signed_url($value->mp3_file, 'music_bucket', 'new_release');
+                }
+            }
+        }
+
+        if ($result) {
+            return TheOneResponse::ok(['tracks' => $result], 'Tracks retrieved successfully.');
         } else {
             return TheOneResponse::notFound(errorMessage: 'No Tracks found');
         }
     }
 
     //get top 100 streams
-
     public function top100_streams(Request $request)
     {
         $limit = $request->query('limit', 100);
@@ -426,52 +499,6 @@ class Catalog extends Controller
         }
     }
 
-    // public function top100_streams(Request $request)
-    // {
-    //     $limit = $request->query('limit', 100);
-
-    //     // $query = "SELECT s.release_id, r.*,tbl_mp3_mix.*,
-    //     //           s.track_id, ts.qty
-    //     //         FROM tbl_mp3_statistics s, tbl_release r, tbl_mp3_mix, summery_top_streams ts
-    //     //         WHERE s.release_id=r.release_id
-    //     //         AND s.track_id=ts.track_id
-    //     //         AND s.track_id = tbl_mp3_mix.id
-    //     //         AND r.online=1
-    //     //         AND s.type=1
-    //     //         AND s.countable=1
-    //     //         AND DATE(r.original_release_date) BETWEEN CURDATE() - INTERVAL 183 DAY AND CURDATE() - INTERVAL 1 DAY
-    //     //         AND r.release_date<=CURDATE()
-    //     //         AND s.release_id!='' AND s.track_id!=0
-    //     //         AND tbl_mp3_mix.stream_status=1
-    //     //         AND (tbl_mp3_mix.stream_countries IS NULL || tbl_mp3_mix.stream_countries='WW')
-    //     //         ORDER BY ts.qty DESC
-    //     //         LIMIT $limit OFFSET 0";
-
-    //     //         $top100Streams = DB::select($query);
-
-    //     $top100Streams = DB::table('tbl_mp3_statistics as s')
-    //         ->select('s.release_id', DB::raw('COUNT(s.track_id) as stream_qty'), 's.track_id')
-    //         ->join('tbl_release as r', 's.release_id', '=', 'r.release_id')
-    //         ->where('r.online', 1)
-    //         ->where('s.type', 1)
-    //         ->where('s.countable', 1)
-    //         ->whereBetween(DB::raw('DATE(s.tstamp)'), [
-    //             DB::raw('CURDATE() - INTERVAL DAYOFWEEK(CURDATE())+365 DAY'),
-    //             DB::raw('CURDATE() - INTERVAL DAYOFWEEK(CURDATE())-1 DAY')
-    //         ])
-    //         ->where('s.release_id', '!=', '')
-    //         ->where('s.track_id', '!=', 0)
-    //         ->groupBy('s.track_id')
-    //         ->orderByDesc('stream_qty')
-    //         ->limit($limit)
-    //         ->get();
-
-    //     if ($top100Streams->isNotEmpty()) {
-    //         return TheOneResponse::ok(['top100Streams' => $top100Streams], 'Top 100 retrieved successfully.');
-    //     } else {
-    //         return TheOneResponse::notFound(errorMessage: 'No Tracks found');
-    //     }
-    // }
 
     //get top 100 prime
     public function top100_prime(Request $request)
@@ -525,30 +552,6 @@ class Catalog extends Controller
             return TheOneResponse::notFound(errorMessage: 'No data found');
         }
     }
-    // public function top100_releases(Request $request)
-    // {
-    //     $limit = $request->query('limit', 100);
-    //     $query = DB::table('tbl_ordered_basket_items as b')
-    //         ->select('r.release_id', DB::raw('COUNT(b.track_id) as download_qty'))
-    //         ->join('tbl_release as r', 'b.track_id', '=', 'r.id')
-    //         ->where('r.online', 1)
-    //         ->where('b.release_or_track', 'release')
-    //         ->whereBetween(DB::raw('DATE(b.created_at)'), [
-    //             DB::raw('CURDATE() - INTERVAL DAYOFWEEK(CURDATE()) + 365 DAY'),
-    //             DB::raw('CURDATE() - INTERVAL DAYOFWEEK(CURDATE()) - 1 DAY')
-    //         ])
-    //         ->groupBy('b.track_id', 'r.release_id')
-    //         ->orderByDesc('download_qty')
-    //         ->limit($limit);
-
-    //     $top100_releases = $query->get();
-
-    //     if ($top100_releases->isNotEmpty()) {
-    //         return TheOneResponse::ok(['top100_releases' => $top100_releases], 'top100 releases retrieved successfully.');
-    //     } else {
-    //         return TheOneResponse::notFound(errorMessage: 'No data found');
-    //     }
-    // }
 
     //get top 100 genre
     public function top100_genre(Request $request)
@@ -624,17 +627,17 @@ class Catalog extends Controller
             return TheOneResponse::notFound('No data found');
         }
 
-        $cloud_lib = new Cloud_lib();
+        // $cloud_lib = new Cloud_lib();
         foreach ($result as $value) {
             $value->can_stream = 1;
 
             if ($value->mp3_preview != $value->mp3_file) {
-                $value->preview_file_url = $cloud_lib->get_signed_url($value->mp3_preview, 'music_bucket', 'prev');
+                $value->preview_file_url = $this->cloud_lib->get_signed_url($value->mp3_preview, 'music_bucket', 'prev');
             } else {
                 if (!is_null($value->mp3_sd)) {
-                    $value->preview_file_url = $cloud_lib->get_signed_url($value->mp3_sd, 'music_bucket', 'new_release');
+                    $value->preview_file_url = $this->cloud_lib->get_signed_url($value->mp3_sd, 'music_bucket', 'new_release');
                 } else {
-                    $value->preview_file_url = $cloud_lib->get_signed_url($value->mp3_file, 'music_bucket', 'new_release');
+                    $value->preview_file_url = $this->cloud_lib->get_signed_url($value->mp3_file, 'music_bucket', 'new_release');
                 }
             }
 
@@ -664,107 +667,6 @@ class Catalog extends Controller
         return TheOneResponse::ok(['top100_genre_stream' => $result], 'Genre Hype Tracks');
     }
 
-
-    // public function top100_genre(Request $request)
-    // {
-    //     $limit = $request->query('limit', 100);
-    //     $offset = $request->query('offset', 0);
-    //     $genre = $request->input('genre');
-
-
-    //     if (!$genre) {
-    //         TheOneResponse::other(301, ['success' => false], 'Please provide genre.');
-    //     } else {
-
-    //         $result = DB::table('tbl_mp3_statistics as s')
-    //             ->select('t.*', 's.track_id', 's.release_id', DB::raw('COUNT(*) as total'))
-    //             ->join('tbl_mp3_mix as t', 's.track_id', '=', 't.id')
-    //             ->join('tbl_release as r', 'r.release_id', '=', 't.release_id')
-    //             ->where('r.online', 1)
-    //             ->where('s.type', 1)
-    //             ->where('s.countable', 1)
-    //             ->where('r.release_date', '<=', DB::raw('CURDATE()'))
-    //             ->whereBetween(DB::raw('DATE(s.tstamp)'), [
-    //                 DB::raw('CURDATE() - INTERVAL DAYOFWEEK(CURDATE()) + 730 DAY'),
-    //                 DB::raw('CURDATE() - INTERVAL DAYOFWEEK(CURDATE()) - 1 DAY')
-    //             ])
-    //             ->where('t.gener', $genre)
-    //             ->where('t.stream_status', 1)
-    //             ->where(function ($query) {
-    //                 $query->whereNull('t.stream_countries')
-    //                     ->orWhere('t.stream_countries', 'WW');
-    //             })
-    //             ->groupByRaw('s.track_id,s.user_id')
-    //             ->orderBy('total', 'DESC')
-    //             ->limit($limit)
-    //             ->offset($offset)
-    //             ->get();
-
-
-
-    //         //$result = $this->Apimobile_model->get_genre_top_tracks_streams($genre, $limit, $offset, 'hype');
-    //         if ($result) {
-    //             // $liked_list = $this->likedList($user_id, 'track');
-    //             foreach ($result as $key => $value) {
-    //                 $value->can_stream = 1;
-
-    //                 $cloud_lib = new Cloud_lib();
-    //                 // Get Preview URL
-    //                 if ($value->mp3_preview != $value->mp3_file) {
-    //                     $previewUrl = $cloud_lib->get_signed_url($value->mp3_preview, 'music_bucket', 'prev');
-    //                 } else {
-    //                     if (!is_null($value->mp3_sd)) {
-    //                         $previewUrl = $cloud_lib->get_signed_url($value->mp3_sd, 'music_bucket', 'new_release');
-    //                     } else {
-    //                         $previewUrl = $cloud_lib->get_signed_url($value->mp3_file, 'music_bucket', 'new_release');
-    //                     }
-    //                 }
-    //                 $result['preview_file_url'] = $previewUrl;
-
-    //                 // Get User Preferential urls
-    //                 $music_files = [
-    //                     'mp3_file' => $value->mp3_file,
-    //                     'mp3_sd' => $value->mp3_sd,
-    //                     'flac_file' => $value->flac_file
-    //                 ];
-    //                 // Get Stream and Download URL
-    //                 // $preferential_urls = $this->get_stream_download_url($user_id, $music_files);
-    //                 // $result[$key]['download_url'] = $preferential_urls['download_url'];
-    //                 // $result[$key]['stream_url'] = $preferential_urls['stream_url'];
-
-    //                 $result['duration_second'] = $this->durationToSecond($value->duration);
-
-    //                 // if (isset($liked_list[$value['id']]) && $liked_list[$value['id']])
-    //                 //     $resultList[$key]['liked'] = 1;
-    //                 // else
-    //                 //     $resultList[$key]['liked'] = 0;
-    //                 $artists = $this->getTrackArtists($value->track_id, 1);
-
-    //                 $artist_name = '';
-    //                 $artist_ids = '';
-    //                 foreach ($artists as $key1 => $data) {
-    //                     if ($key1 == 0) {
-    //                         $artist_name = $artist_name . $data->artist_name;
-    //                         $artist_ids = $artist_ids . $data->id;
-    //                     } else {
-    //                         $artist_name = $artist_name . ', ' . $data->artist_name;
-    //                         $artist_ids = $artist_ids . ', ' . $data->id;
-    //                     }
-    //                 }
-    //                 $result['artist_name'] = $artist_name;
-    //                 $result['artist_ids'] = $artist_ids;
-
-    //                 //$result[$key]['track_key'] = $result[$key]['key'];
-
-    //                 // Remove unwanted params
-    //                 //unset($result[$key]['key']);
-    //             }
-    //             return TheOneResponse::ok(['top100_genre_stream' => $result], 'Genre Hype Tracks');
-    //         } else {
-    //             return TheOneResponse::notFound('No data found');
-    //         }
-    //     }
-    // }
 
     public function durationToSecond($duration)
     {
@@ -907,12 +809,13 @@ class Catalog extends Controller
     // Get weekly chart data
     public function weekly_chart(Request $request)
     {
-        $limit = $request->input('limit', 30);
+        $limit = $request->input('limit', 10);
         $chart = $request->input('chart');
         $offset = $request->input('offset', 1);
 
-        //$yearweek = $this->getCurrentYearWeek();
-        $yearweek = 202435;
+        $yearweek = $this->getCurrentYearWeek();
+
+       // $yearweek = 202435;
 
         // Choose chart data based on the chart type
         $charts = match ($chart) {
@@ -956,11 +859,11 @@ class Catalog extends Controller
     // Get Preview URL based on mp3 files available
     private function getPreviewUrl($value)
     {
-        $cloud_lib = new Cloud_lib();
+        // $cloud_lib = new Cloud_lib();
 
         return $value->mp3_preview != $value->mp3_file
-            ? $cloud_lib->get_signed_url($value->mp3_preview, 'music_bucket', 'prev')
-            : $cloud_lib->get_signed_url($value->mp3_sd ?? $value->mp3_file, 'music_bucket', 'new_release');
+            ? $this->cloud_lib->get_signed_url($value->mp3_preview, 'music_bucket', 'prev')
+            : $this->cloud_lib->get_signed_url($value->mp3_sd ?? $value->mp3_file, 'music_bucket', 'new_release');
     }
 
     // Format artist names by fetching and concatenating them
@@ -995,24 +898,6 @@ class Catalog extends Controller
             ->limit($limit)
             ->get();
     }
-    // public function getInternationalCharts($limit, $yearweek)
-    // {
-    //     return DB::table('tbl_mp3_mix')
-    //         ->join('tbl_admin_week_chart', 'tbl_admin_week_chart.track_id', '=', 'tbl_mp3_mix.id')
-    //         ->join('tbl_release', 'tbl_release.release_id', '=', 'tbl_mp3_mix.release_id')
-    //         ->selectRaw(
-    //             'tbl_admin_week_chart.track_id, tbl_admin_week_chart.order, tbl_mp3_mix.*,
-    //         tbl_release.cover, tbl_release.label, tbl_release.title'
-    //         )
-    //         ->where('tbl_admin_week_chart.yearweek', $yearweek)
-    //         ->where('tbl_admin_week_chart.online', 1)
-    //         ->whereIn('tbl_admin_week_chart.release_id', function ($query) {
-    //             $query->select('release_id')->from('tbl_release')->where('online', 1);
-    //         })
-    //         ->orderBy('tbl_admin_week_chart.order', 'asc')
-    //         ->limit($limit)
-    //         ->get();
-    // }
 
     // Optimized getDownloadCharts with single query
     private function getDownloadCharts($limit, $yearweek)
@@ -1040,23 +925,6 @@ class Catalog extends Controller
             ->limit($limit)
             ->get();
     }
-    // public function getDownloadCharts($limit, $yearweek)
-    // {
-    //     return DB::table('tbl_mp3_mix')
-    //         ->join('tbl_download_chart', 'tbl_download_chart.track_id', '=', 'tbl_mp3_mix.id')
-    //         ->join('tbl_release', 'tbl_release.release_id', '=', 'tbl_mp3_mix.release_id')
-    //         ->selectRaw(
-    //             'tbl_download_chart.track_id, tbl_download_chart.order, tbl_mp3_mix.*,
-    //         tbl_release.cover, tbl_release.label, tbl_release.title'
-    //         )
-    //         ->where('tbl_download_chart.yearweek', $yearweek)
-    //         ->whereIn('tbl_download_chart.release_id', function ($query) {
-    //             $query->select('release_id')->from('tbl_release')->where('online', 1);
-    //         })
-    //         ->orderBy('tbl_download_chart.order', 'asc')
-    //         ->limit($limit)
-    //         ->get();
-    // }
 
     // Optimized getRegionalCharts with single query
     private function getRegionalCharts($region, $limit, $yearweek)
@@ -1085,24 +953,76 @@ class Catalog extends Controller
             ->limit($limit)
             ->get();
     }
-    // public function getRegionalCharts($region, $limit, $yearweek)
-    // {
-    //     return DB::table('tbl_mp3_mix')
-    //         ->join('tbl_admin_week_chart_regional', 'tbl_admin_week_chart_regional.track_id', '=', 'tbl_mp3_mix.id')
-    //         ->join('tbl_release', 'tbl_release.release_id', '=', 'tbl_mp3_mix.release_id')
-    //         ->selectRaw(
-    //             'tbl_admin_week_chart_regional.track_id, tbl_admin_week_chart_regional.order, tbl_mp3_mix.*,
-    //         tbl_release.cover, tbl_release.label, tbl_release.title'
-    //         )
-    //         ->where('tbl_admin_week_chart_regional.yearweek', $yearweek)
-    //         ->where('tbl_admin_week_chart_regional.region', $region)
-    //         ->where('tbl_admin_week_chart_regional.online', 1)
-    //         ->whereIn('tbl_admin_week_chart_regional.release_id', function ($query) {
-    //             $query->select('release_id')->from('tbl_release')->where('online', 1);
-    //         })
-    //         ->orderBy('tbl_admin_week_chart_regional.order', 'asc')
-    //         ->limit($limit)
-    //         ->get();
-    // }
+
+    //not in use
+    function getIndividualReleasePrice($rel, $user_id, $priceArr)
+    {
+        // Get the currency
+        $currency =  'USD'; //getCurrency(); Ensure this is a globally accessible function
+        $final_pr = 0.00;
+        $rel_price = 0.00;
+
+        // Fetch user settings
+        $settings = DB::table('tbl_settings_audio')
+            ->where('user_id', $user_id)
+            ->first();
+
+        if (empty($settings)) {
+           // $settings = defaultAudioSettings(); // Ensure this is a globally accessible function
+        }
+
+        // Check release source
+        if ($rel['release_source'] === 'website_frontend') {
+            $distributor_prices = [];
+            // Logic for frontend source can be added here if needed
+        } else if ($rel['release_source'] === 'ftp_distributor') {
+            // Fetch distributor prices
+            $distributor_prices = DB::table('tbl_distributor_price_codes')
+                ->where('code_for', 'album')
+                ->where('distributor_id', $rel['distributor_id'])
+                ->where('price_code', $rel['price_code'])
+                ->first();
+
+            if (!empty($distributor_prices)) {
+                $rel_price = $currency === 'EUR'
+                    ? $distributor_prices->selling_price_eur
+                    : $distributor_prices->selling_price;
+            }
+
+            if (!empty($settings)) {
+                switch ($settings->audio_format) {
+                    case 'mp3':
+                        $final_pr = $rel_price;
+                        break;
+                    case 'wav':
+                        $final_pr = $rel_price + round($rel_price * ($priceArr['wav_additional_release'] / 100), 2);
+                        break;
+                    case 'flac':
+                        $final_pr = $rel_price + round($rel_price * ($priceArr['flac_additional_release'] / 100), 2);
+                        break;
+                    default:
+                        $final_pr = $rel_price;
+                        break;
+                }
+            } else {
+                $final_pr = $rel_price;
+            }
+        }
+
+        return $final_pr;
+    }
+
 
 }
+
+
+
+
+
+
+
+
+
+
+
+

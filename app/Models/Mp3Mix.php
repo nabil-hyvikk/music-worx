@@ -63,6 +63,11 @@ class Mp3Mix extends Model
         }
     }
 
+    public function comments()
+    {
+        return $this->hasMany(UserCommentsRatings::class, 'track_id', 'id');
+    }
+
     // public function artists()
     // {
     //     return $this->hasMany(TrackArtists::class, 'artist_id', 'id');

@@ -16,7 +16,7 @@
     <link href="../../../assets/css/nucleo-icons.css" rel="stylesheet" />
     <link href="../../../assets/css/nucleo-svg.css" rel="stylesheet" />
     <!-- Font Awesome Icons -->
-    <script src="https://kit.fontawesome.com/42d5adcbca.js" crossorigin="anonymous"></script>
+    <!-- <script src="https://kit.fontawesome.com/42d5adcbca.js" crossorigin="anonymous"></script> -->
     <!-- Material Icons -->
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
@@ -87,30 +87,30 @@
             </div>
         </div>
     </main>
-    {{-- @endsection --}}
+<!--  -->
 
-    <!-- Core JS Files -->
-    <script src="../../../assets/js/core/popper.min.js"></script>
-    <script src="../../../assets/js/core/bootstrap.min.js"></script>
-    <script src="../../../assets/js/plugins/perfect-scrollbar.min.js"></script>
-    <script src="../../../assets/js/plugins/smooth-scrollbar.min.js"></script>
+<!-- Core JS Files -->
+<script src="../../../assets/js/core/popper.min.js"></script>
+<script src="../../../assets/js/core/bootstrap.min.js"></script>
+<script src="../../../assets/js/plugins/perfect-scrollbar.min.js"></script>
+<script src="../../../assets/js/plugins/smooth-scrollbar.min.js"></script>
 
-    <!-- Kanban scripts -->
-    <script src="../../../assets/js/plugins/dragula/dragula.min.js"></script>
-    <script src="../../../assets/js/plugins/jkanban/jkanban.min.js"></script>
-    <script>
-        var win = navigator.platform.indexOf('Win') > -1;
-        if (win && document.querySelector('#sidenav-scrollbar')) {
-            var options = {
-                damping: '0.5'
-            }
-            Scrollbar.init(document.querySelector('#sidenav-scrollbar'), options);
+<!-- Kanban scripts -->
+<script src="../../../assets/js/plugins/dragula/dragula.min.js"></script>
+<script src="../../../assets/js/plugins/jkanban/jkanban.min.js"></script>
+<script>
+    var win = navigator.platform.indexOf('Win') > -1;
+    if (win && document.querySelector('#sidenav-scrollbar')) {
+        var options = {
+            damping: '0.5'
         }
-    </script>
-    <!-- Github buttons -->
-    <script async defer src="https://buttons.github.io/buttons.js"></script>
-    <!-- Control Center for Material Dashboard: parallax effects, scripts for the example pages etc -->
-    <script src="../../../assets/js/material-dashboard.min.js?v=3.1.0"></script>
+        Scrollbar.init(document.querySelector('#sidenav-scrollbar'), options);
+    }
+</script>
+<!-- Github buttons -->
+<script async defer src="https://buttons.github.io/buttons.js"></script>
+<!-- Control Center for Material Dashboard: parallax effects, scripts for the example pages etc -->
+<script src="../../../assets/js/material-dashboard.min.js?v=3.1.0"></script>
 </body>
 
 </html>

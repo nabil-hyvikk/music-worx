@@ -52,13 +52,5 @@ class RefreshAccessToken extends Controller
 
         return TheOneResponse::created(['new_token' => $newToken],'New Token generated successfully');
 
-        // return response()->json([
-        //     'message' => 'New Token generated successfully',
-        //     'token_type' => 'bearer',
-        //     'new_token' => $newToken,
-        //     'expires_at' => $expiresAt,
-        // ], 201);
-
-
     }
 }

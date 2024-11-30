@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AppActivity;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\Catalog;
 use App\Http\Controllers\Api\LikedTracks;
@@ -8,6 +9,7 @@ use App\Http\Controllers\Api\Playlist;
 use App\Http\Controllers\Api\PurchasedTracks;
 use App\Http\Controllers\Api\RefreshAccessToken;
 use App\Http\Controllers\Api\Search;
+use App\Http\Controllers\api\Streambox;
 use App\Http\Controllers\ElasticSearch;
 use App\Http\Controllers\SearchController;
 use Illuminate\Http\Request;
@@ -45,7 +47,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('search/labels', [Search::class, 'search_label']);
     Route::post('create_cart', [CartController::class, 'create_cart']);
     Route::post('add_to_cart', [CartController::class, 'addToCart']);
+    Route::post('add_activity', [AppActivity::class, 'add_activity']);
     Route::post('/logout', [Login::class, 'logout']);
+    Route::post('getCharts', [Streambox::class, 'getCharts']);
 });
 
 // Route::get('/user', function (Request $request) {

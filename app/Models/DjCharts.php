@@ -18,4 +18,9 @@ class DjCharts extends Model
     {
         return $query->where('is_published', 1)->where('is_featured', 0)->orderBy('published_at', 'DESC');
     }
+
+    public function items()
+    {
+        return $this->hasMany(DjChartItems::class, 'chart_id');
+    }
 }

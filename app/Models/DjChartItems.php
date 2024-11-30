@@ -24,8 +24,8 @@ class DjChartItems extends Model
     //     return $this->belongsTo(Release::class, 'release_id', 'id'); // Adjust the foreign key relationship as necessary
     // }
 
-    // public function track()
-    // {
-    //     return $this->belongsTo(Track::class, 'track_id');
-    // }
+    public function track()
+    {
+        return $this->belongsTo(Mp3Mix::class, 'track_id');
+    }
 }

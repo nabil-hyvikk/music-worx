@@ -12,7 +12,6 @@ use App\Libraries\Cloud_lib;
 
 class PurchasedTracks extends Controller
 {
-
     public function index(Request $request)
     {
         $user_token = $request->input('user_token');
@@ -35,7 +34,7 @@ class PurchasedTracks extends Controller
             ->with([
                 'items.track',
                 'items.track.release' => function ($query) {
-                    $query->select('tbl_release.id', 'release_id', 'original_release_date');
+                    $query->select('tbl_release.id', 'release_id', 'original_release_date', 'cover');
                 },
                 'items.track.artists' => function ($query) {
                     $query->select('tbl_users.id', 'artist_name');
@@ -66,6 +65,8 @@ class PurchasedTracks extends Controller
                 }
             }
         }
+
+
 
         if ($purchasedTracks->isEmpty()) {
             return TheOneResponse::notFound('Purchased tracks not found.');

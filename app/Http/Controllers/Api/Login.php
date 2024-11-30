@@ -34,6 +34,8 @@ class Login extends Controller
             if ($user->password === sha1($request->password)) {
                 Auth::login($user);
 
+                session(['user_id' => $user->id]);
+
                 $mobileToken = $user->mobile_token;
 
                 if (!$mobileToken) {

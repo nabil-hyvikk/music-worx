@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\API\BaseController as BaseController;
 use App\Http\Responses\TheOneResponse;
+use App\Models\DistributorPriceCodes;
 use App\Models\DjCharts;
+use App\Models\SettingsAudio;
 use App\Models\Streambox;
 use App\Models\StreamboxItems;
 use App\Models\UsersMobileToken;
@@ -19,6 +21,11 @@ use App\Libraries\Cloud_lib;
 
 class Playlist extends Controller
 {
+    protected $cloud_lib;
+    public function __construct()
+    {
+        $this->cloud_lib = new Cloud_lib();
+    }
     //get all playlist
     public function index(Request $request)
     {
@@ -91,29 +98,169 @@ class Playlist extends Controller
         $user_id = $userMobileToken->user_id;
 
         // 'items.track'
-        $playlist = Streambox::with([
-            'user:id,artist_name',
-        ])->withCount([
-                    'followersCount as likes',
-                    'items as total_tracks'
-                ])->where('user_id', '=', $user_id)->where('id', $playlist_id)->first();
+        //'items.track',
+        //'items.track.release:id,release_id,cover,label,slug,title'
+        // $playlist = Streambox::with([
+        //     'user:id,artist_name',
+
+        // ])->withCount([
+        //             'followersCount as likes',
+        //             'items as total_tracks'
+        //         ])->where('user_id', '=', $user_id)->where('id', $playlist_id)->first();
+
+        $playlist = DB::table('tbl_streambox as s')
+            ->select('s.id','s.name','s.is_public','s.description','s.photo_cover','s.user_id','s.updated_at','u.artist_name','u.slug','u.artist_name as created_by',
+                DB::raw('(SELECT COUNT(*) FROM tbl_follow f WHERE f.type = "playlist" AND f.following = s.id) as numb'),
+                DB::raw('(SELECT COUNT(*) FROM tbl_mp3_mix as m join tbl_streambox_items as si WHERE m.id=si.track_id AND s.id = si.streambox_id) as track_count'),
+                // DB::raw('(SELECT SUM(m.duration) FROM tbl_mp3_mix as m join tbl_streambox_items as si WHERE m.id=si.track_id AND s.id = si.streambox_id) as play_back_time')
+            )->leftJoin('tbl_users as u', 's.user_id', '=', 'u.id')
+            ->where('s.id', $playlist_id)->where('u.id', $user_id)
+            ->groupBy('s.id')
+            ->orderBy('s.tstamp', 'DESC')
+            ->first();
 
         if (!$playlist) {
             return TheOneResponse::notFound('Playlists not found');
         }
 
-        // Get cover URL
+        $songs = DB::table('tbl_mp3_mix as t')->select('t.id','t.mp3_file','t.mp3_sd','t.flac_file','t.duration','t.mp3_preview','t.stream_status',
+            't.stream_countries','t.key as track_key','t.gener','t.mix_name','t.song_name','t.bpm','t.waveform','t.green_waveform',
+            't.full_wf','t.full_gwf','t.preview_starts','t.preview_ends','t.slug','t.user_id','t.release_id','t.id as track_id',
+            't.distributor_price_code','tbl_release.cover','tbl_release.label','tbl_release.title','tbl_release.release_source','tbl_release.distributor_id',
+            DB::raw('(SELECT user.artist_name FROM tbl_users as user WHERE user.id = t.user_id) as artist_name'),
+            DB::raw('(SELECT user.artist_name FROM tbl_users as user WHERE user.id = tbl_release.label) as label_name'),
+            's.id','s.track_id'
+        )->join('tbl_release', 'tbl_release.release_id', '=', 't.release_id')
+            ->join('tbl_streambox_items as s', 's.track_id', '=', 't.id')
+            ->where('s.streambox_id', '=', $playlist_id)->get();
+        //->orderBy('tbl_release.original_release_date', 'DESC')->get();
+
+        $totalSeconds = DB::table('tbl_streambox_items as items')
+            ->join('tbl_mp3_mix', 'tbl_mp3_mix.id', '=', 'items.track_id')
+            ->where('items.streambox_id', $playlist_id)
+            ->sum(DB::raw("TIME_TO_SEC(tbl_mp3_mix.duration)"));
+
+        $playlist->play_back_time = gmdate("H:i:s", ($totalSeconds / 60));
+
+        // Get playlist cover URL
         $fname = explode('.', $playlist->photo_cover);
         $cover250x250 = "https://images.music-worx.com/covers/" . $fname[0] . '-250x250.jpg';
         $cover100x100 = "https://images.music-worx.com/covers/" . $fname[0] . '-100x100.jpg';
 
         // array_push($playlist, ['cover250x250' => $cover250x250, 'cover100x100' => $cover100x100]);
-        $playlist['cover250x250'] = $cover250x250;
-        $playlist['cover100x100'] = $cover100x100;
-        $playlist->artist_name = $playlist->user->artist_name;
-        unset($playlist->user);
+        $playlist->cover250x250 = $cover250x250;
+        $playlist->cover100x100 = $cover100x100;
+        //$playlist->artist_name = $playlist->user->artist_name;
+        //unset($playlist->user);
 
-        return TheOneResponse::ok(['data' => $playlist], 'Playlist retrived successfully.');
+        $result = $this->getAudioPreference($user_id) ?? $this->setAudioPreference($user_id);
+
+        $getFileByQuality = function ($quality, $musicFiles) {
+            return match ($quality) {
+                'mp3-128' => $musicFiles['mp3_sd'] ?? $musicFiles['mp3_file'],
+                'mp3-320' => $musicFiles['mp3_file'],
+                'flac' => $musicFiles['flac_file'] ?? $musicFiles['mp3_file'],
+                default => $musicFiles['mp3_file'],
+            };
+        };
+
+        $musicFilesList = [];
+        foreach ($songs as $s) {
+            $musicFilesList[] = [
+                'id' => $s->id,
+                'mp3_file' => $s->mp3_file,
+                'mp3_sd' => $s->mp3_sd,
+                'flac_file' => $s->flac_file,
+            ];
+        }
+
+        $streamUrls = [];
+        $downloadUrls = [];
+
+        foreach ($musicFilesList as $musicFiles) {
+            $streamFile = $getFileByQuality($result['app_stream_qlt'], $musicFiles);
+            $downloadFile = $getFileByQuality($result['app_download_qlt'], $musicFiles);
+
+            $streamUrls[] = $this->cloud_lib->get_signed_url($streamFile, 'music_bucket', 'new_release', '+5 days');
+            $downloadUrls[] = $this->cloud_lib->get_signed_url($downloadFile, 'music_bucket', 'new_release', '+5 days');
+        }
+
+
+        foreach ($songs as $index => $s) {
+            $s->stream_url = $streamUrls[$index];
+            $s->download_url = $downloadUrls[$index];
+            $s->preview_file_url = $this->getPreviewUrl($s);
+            $s->cover250x250 = "https://images.music-worx.com/covers/" . explode('.', $s->cover)[0] . '-250x250.jpg';
+            $s->cover100x100 = "https://images.music-worx.com/covers/" . explode('.', $s->cover)[0] . '-100x100.jpg';
+            // $s->price = $this->getIndividualTrackPrice($s, $s->release_source, $s->distributor_id);
+        }
+
+        // foreach ($songs as $s) {
+
+        //     // Get cover URL
+        //     $fname = explode('.', $s->cover);
+        //     $cover250x250 = "https://images.music-worx.com/covers/" . $fname[0] . '-250x250.jpg';
+        //     $cover100x100 = "https://images.music-worx.com/covers/" . $fname[0] . '-100x100.jpg';
+        //     $s->cover250x250 = $cover250x250;
+        //     $s->cover100x100 = $cover100x100;
+        //     $music_files = [
+        //         'mp3_file' => $s->mp3_file,
+        //         'mp3_sd' => $s->mp3_sd,
+        //         'flac_file' => $s->flac_file
+        //     ];
+        //     // Get Stream and Download URL
+        //     $preferential_urls = $this->getStreamDownloadUrl($user_id, $music_files);
+        //     $s->download_url = $preferential_urls['download_url'];
+        //     $s->stream_url = $preferential_urls['stream_url'];
+        //     $duration = $this->durationToSecond($s->duration);
+        //     $seconds += $duration;
+        // }
+
+
+        return TheOneResponse::ok(['playlist_data' => $playlist, 'song_data' => $songs], 'Playlist retrived successfully.');
+    }
+
+    public function durationToSecond($duration)
+    {
+        $durationArray = explode(':', $duration);
+        if (count($durationArray) === 2) {
+            $seconds = ($durationArray[0] * 60) + $durationArray[1];
+            return $seconds;
+        }
+        return 0;
+    }
+
+    private function getPreviewUrl($value)
+    {
+        return $value->mp3_preview != $value->mp3_file
+            ? $this->cloud_lib->get_signed_url($value->mp3_preview, 'music_bucket', 'prev')
+            : $this->cloud_lib->get_signed_url($value->mp3_sd ?? $value->mp3_file, 'music_bucket', 'new_release');
+    }
+
+    public static function getIndividualTrackPrice($track, $rel_source, $dist_id)
+    {
+        $currency = 'USD';
+        $finalPrice = 0.00;
+        $finalTrackPrice = 0.00;
+
+        if ($rel_source === 'website_frontend') {
+            $finalTrackPrice = $currency === 'EUR' ? $track['mw_price_eur'] : $track['mw_price'];
+            $finalPrice = $finalTrackPrice;
+        } elseif ($rel_source === 'ftp_distributor') {
+            // Fetch distributor price
+            $distributorPriceTrack = DistributorPriceCodes::where('code_for', 'track')
+                ->where('distributor_id', $dist_id)
+                ->where('price_code', $track->distributor_price_code)
+                ->first();
+
+            if ($distributorPriceTrack) {
+                $finalTrackPrice = $currency === 'EUR'
+                    ? $distributorPriceTrack->selling_price_eur
+                    : $distributorPriceTrack->selling_price;
+            }
+            $finalPrice = $finalTrackPrice;
+        }
+        return $finalPrice;
     }
 
     //create playlist
@@ -227,7 +374,7 @@ class Playlist extends Controller
             $playlist->is_public = $is_public;
         }
 
-        $cloud_lib = new Cloud_lib();
+        //$cloud_lib = new Cloud_lib();
 
 
         if ($cover_image) {
@@ -236,9 +383,9 @@ class Playlist extends Controller
                 $oldCover = $playlist->photo_cover;
                 $coverParts = pathinfo($oldCover);
                 $oldCoverName = $coverParts['filename'];
-                $cloud_lib->remove_from_wasabi($oldCover, 'img_bucket', 'covers');
-                $cloud_lib->remove_from_wasabi("{$oldCoverName}-250x250.jpg", 'img_bucket', 'covers');
-                $cloud_lib->remove_from_wasabi("{$oldCoverName}-100x100.jpg", 'img_bucket', 'covers');
+                $this->cloud_lib->remove_from_wasabi($oldCover, 'img_bucket', 'covers');
+                $this->cloud_lib->remove_from_wasabi("{$oldCoverName}-250x250.jpg", 'img_bucket', 'covers');
+                $this->cloud_lib->remove_from_wasabi("{$oldCoverName}-100x100.jpg", 'img_bucket', 'covers');
             }
 
 
@@ -321,7 +468,7 @@ class Playlist extends Controller
         // $playlistId = $request->input('playlist_id');
         // $trackIds = $request->input('track_id');
 
-        if (!$userToken && !$playlistId && !is_array($trackIds) && $trackIds==[]) {
+        if (!$userToken && !$playlistId && !is_array($trackIds) && $trackIds == []) {
             return TheOneResponse::other(400, ['success' => false], 'Invalid input provided');
         }
 
@@ -427,4 +574,177 @@ class Playlist extends Controller
     }
 
 
+    //get download url function
+
+    public function getAudioPreference($userId)
+    {
+        $preference = SettingsAudio::select('app_stream_qlt', 'app_download_qlt')
+            ->where('user_id', $userId)
+            ->first();
+
+        return $preference ? $preference->toArray() : null;
+    }
+
+    public function setAudioPreference($userId, array $data = [])
+    {
+        $filteredData = array_filter($data, function ($value) {
+            return !is_null($value) && $value !== '' && $value !== false;
+        });
+
+        $audioSetting = SettingsAudio::where('user_id', $userId)->first();
+
+        if ($audioSetting) {
+            $filteredData['modified_at'] = Carbon::now();
+            $audioSetting->update($filteredData);
+            return [
+                'app_stream_qlt' => $filteredData['app_stream_qlt'] ?? $audioSetting->app_stream_qlt ?? 'mp3-128',
+                'app_download_qlt' => $filteredData['app_download_qlt'] ?? $audioSetting->app_download_qlt ?? 'mp3-128'
+            ];
+        } else {
+            $filteredData['user_id'] = $userId;
+            SettingsAudio::create($filteredData + ['app_stream_qlt' => 'mp3-128', 'app_download_qlt' => 'mp3-128']);
+            return ['app_stream_qlt' => 'mp3-128', 'app_download_qlt' => 'mp3-128'];
+        }
+    }
+
+    private function getStreamDownloadUrl($userId, $musicFiles)
+    {
+        $result = $this->getAudioPreference($userId) ?? $this->setAudioPreference($userId);
+
+        $getFileByQuality = function ($quality, $musicFiles) {
+            return match ($quality) {
+                'mp3-128' => $musicFiles['mp3_sd'] ?? $musicFiles['mp3_file'],
+                'mp3-320' => $musicFiles['mp3_file'],
+                'flac' => $musicFiles['flac_file'] ?? $musicFiles['mp3_file'],
+                default => $musicFiles['mp3_file'],
+            };
+        };
+
+        $streamFile = $getFileByQuality($result['app_stream_qlt'], $musicFiles);
+        $downloadFile = $getFileByQuality($result['app_download_qlt'], $musicFiles);
+
+        $streamUrl = $this->cloud_lib->get_signed_url($streamFile, 'music_bucket', 'new_release', '+5 days');
+        $downloadUrl = $this->cloud_lib->get_signed_url($downloadFile, 'music_bucket', 'new_release', '+5 days');
+
+        return [
+            'stream_url' => $streamUrl,
+            'download_url' => $downloadUrl,
+        ];
+    }
+
+
+    // private function getStreamDownloadUrl($userId, $musicFiles)
+    // {
+    //     $result = $this->getAudioPreference($userId);
+
+    //     if (empty($result)) {
+    //         $result = $this->setAudioPreference($userId);
+    //     }
+
+
+    //     switch ($result['app_stream_qlt']) {
+    //         case 'mp3-128':
+    //             $streamFile = !empty($musicFiles['mp3_sd']) ? $musicFiles['mp3_sd'] : $musicFiles['mp3_file'];
+    //             break;
+
+    //         case 'mp3-320':
+    //             $streamFile = $musicFiles['mp3_file'];
+    //             break;
+
+    //         case 'flac':
+    //             $streamFile = !empty($musicFiles['flac_file']) ? $musicFiles['flac_file'] : $musicFiles['mp3_file'];
+    //             break;
+
+    //         default:
+    //             $streamFile = $musicFiles['mp3_file'];
+    //             break;
+    //     }
+
+
+    //     $streamUrl = $this->cloud_lib->get_signed_url($streamFile, 'music_bucket', 'new_release', '+5 days');
+
+
+    //     switch ($result['app_download_qlt']) {
+    //         case 'mp3-128':
+    //             $downloadFile = !empty($musicFiles['mp3_sd']) ? $musicFiles['mp3_sd'] : $musicFiles['mp3_file'];
+    //             break;
+
+    //         case 'mp3-320':
+    //             $downloadFile = $musicFiles['mp3_file'];
+    //             break;
+
+    //         case 'flac':
+    //             $downloadFile = !empty($musicFiles['flac_file']) ? $musicFiles['flac_file'] : $musicFiles['mp3_file'];
+    //             break;
+
+    //         default:
+    //             $downloadFile = $musicFiles['mp3_file'];
+    //             break;
+    //     }
+
+    //     $downloadUrl = $this->cloud_lib->get_signed_url($downloadFile, 'music_bucket', 'new_release', '+5 days');
+
+
+    //     return [
+    //         'stream_url' => $streamUrl,
+    //         'download_url' => $downloadUrl,
+    //     ];
+    // }
+
+
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
